@@ -10,8 +10,7 @@ use routes::*;
 // This struct encapsulates our application-related logic.
 pub struct Application {
     server: Serve<TcpListener, Router, Router>,
-    // address is exposed as a public field
-    // so we have access to it in tests.
+    // address is exposed as a public field so we have access to it in tests.
     pub address: String,
 }
 
