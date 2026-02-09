@@ -1,22 +1,17 @@
 use std::collections::HashMap;
 
+use crate::UserStore;
 use crate::domain::User;
-
-#[derive(Debug, PartialEq)]
-pub enum UserStoreError {
-    UserAlreadyExists,
-    UserNotFound,
-    InvalidCredentials,
-    UnexpectedError,
-}
+use crate::domain::UserStoreError;
 
 #[derive(Default)]
 pub struct HashmapUserStore {
     map: HashMap<String, User>
 }
 
-impl HashmapUserStore {
-    pub fn add_user(&mut self, user: User) -> Result<(), UserStoreError> {
+#[async_trait::async_trait]
+impl UserStore for HashmapUserStore {
+    async fn add_user(&mut self, user: User) -> Result<(), UserStoreError> {
         if self.map.contains_key(&user.email) {
             Err(UserStoreError::UserAlreadyExists)
         } else {
@@ -25,15 +20,15 @@ impl HashmapUserStore {
         }
     }
 
-    pub fn get_user(&self, email: &str) -> Result<User, UserStoreError> {
+    async fn get_user(&self, email: &str) -> Result<User, UserStoreError> {
         match self.map.get(email) {
             Some(user) => Ok(user.clone()),
             None => Err(UserStoreError::UserNotFound)
         }
     }
 
-    pub fn validate_user(&self, email: &str, password: &str) -> Result<(), UserStoreError> {
-        let user = self.get_user(email)?;
+    async fn validate_user(&self, email: &str, password: &str) -> Result<(), UserStoreError> {
+        let user = self.get_user(email).await?;
         
         if user.password == password {
             Ok(())
@@ -53,7 +48,7 @@ mod tests {
 
         let user = User::new("email".to_string(), "password".to_string(), false);
 
-        assert!(hus.add_user(user).is_ok());
+        assert!(hus.add_user(user).await.is_ok());
     }
 
     #[tokio::test]
@@ -62,8 +57,8 @@ mod tests {
 
         let user = User::new("email".to_string(), "password".to_string(), false);
 
-        assert!(hus.add_user(user).is_ok());
-        assert!(hus.get_user("email").is_ok());
+        assert!(hus.add_user(user).await.is_ok());
+        assert!(hus.get_user("email").await.is_ok());
     }
 
     #[tokio::test]
@@ -72,7 +67,7 @@ mod tests {
 
         let user = User::new("email".to_string(), "password".to_string(), false);
 
-        assert!(hus.add_user(user).is_ok());
-        assert!(hus.validate_user("email", "password").is_ok());
+        assert!(hus.add_user(user).await.is_ok());
+        assert!(hus.validate_user("email", "password").await.is_ok());
     }
 }
