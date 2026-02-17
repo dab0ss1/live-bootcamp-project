@@ -1,19 +1,24 @@
-#[derive(Clone, PartialEq)]
-pub struct Password(String);
+use validator::{Validate, ValidationErrors};
+
+#[derive(Clone, PartialEq, Validate)]
+pub struct Password {
+    #[validate(length(min = 8))]
+    password: String
+}
 
 impl Password {
-    pub fn parse(password: String) -> Result<Password, String> {
-        if password.len() < 8 {
-            Err(String::from("Password needed to be 8 characters or longer"))
-        } else {
-            Ok(Password(password))
+    pub fn parse(password: String) -> Result<Password, ValidationErrors> {
+        let password_struct = Password { password };
+        match password_struct.validate() {
+            Ok(_) => Ok(password_struct),
+            Err(e) => Err(e)
         }
     }
 }
 
 impl AsRef<str> for Password {
     fn as_ref(&self) -> &str {
-        &self.0
+        &self.password
     }
 }
 

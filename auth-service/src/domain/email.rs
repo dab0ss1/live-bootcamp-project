@@ -1,21 +1,25 @@
-#[derive(Clone, Eq, PartialEq, Hash)]
-pub struct Email(String);
+use validator::{Validate, ValidationErrors};
+
+#[derive(Clone, Eq, PartialEq, Hash, Validate)]
+pub struct Email {
+    #[validate(email)]
+    #[validate(length(min = 1))]
+    email: String
+}
 
 impl Email {
-    pub fn parse(email: String) -> Result<Email, String> {
-        if email.is_empty() {
-            Err(String::from("Email is empty"))
-        } else if !email.contains("@") {
-            Err(String::from("Email is missing '@'"))
-        } else {
-            Ok(Email(email))
+    pub fn parse(email: String) -> Result<Email, ValidationErrors> {
+        let email_struct = Email { email };
+        match email_struct.validate() {
+            Ok(_) => Ok(email_struct),
+            Err(e) => Err(e)
         }
     }
 }
 
 impl AsRef<str> for Email {
     fn as_ref(&self) -> &str {
-        &self.0
+        &self.email
     }
 }
 
