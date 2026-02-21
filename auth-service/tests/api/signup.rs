@@ -5,8 +5,6 @@ use crate::helpers::{get_random_email, TestApp};
 async fn should_return_400_if_invalid_input() {
     let app = TestApp::new().await;
 
-    let random_email = get_random_email(); // Call helper method to generate email
-
     let test_cases = [
         serde_json::json!({
             "email": "",
