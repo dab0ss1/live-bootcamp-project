@@ -17,11 +17,13 @@ pub mod app_state;
 pub mod domain;
 pub mod routes;
 pub mod services;
+pub mod utils;
 
 pub use app_state::*;
 pub use domain::*;
 pub use routes::*;
 pub use services::*;
+pub use utils::*;
 
 // This struct encapsulates our application-related logic.
 pub struct Application {

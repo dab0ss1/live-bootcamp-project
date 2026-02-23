@@ -42,8 +42,6 @@ impl UserStore for HashmapUserStore {
 
 #[cfg(test)]
 mod tests {
-    use crate::password;
-
     use super::*;
 
     #[tokio::test]
