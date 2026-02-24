@@ -11,7 +11,7 @@ pub async fn verify_token(
     Json(request): Json<VerifyTokenRequest>,
 ) -> Result<impl IntoResponse, AuthAPIError> {
 
-    if validate_token(&request.token).await.is_err() {
+    if validate_token(state.banned_token_store.clone(), &request.token).await.is_err() {
         return Err(AuthAPIError::InvalidToken);
     }
 
