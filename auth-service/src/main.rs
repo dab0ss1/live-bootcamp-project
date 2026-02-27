@@ -1,7 +1,7 @@
 use std::sync::Arc;
 
 use auth_service::Application;
-use auth_service::BannedTokenStore;
+use auth_service::HashmapTwoFACodeStore;
 use auth_service::HashmapUserStore;
 use auth_service::HashsetBannedTokenStore;
 use auth_service::utils::constants::prod;
@@ -12,9 +12,12 @@ use tokio::sync::RwLock;
 async fn main() {
     let user_store = HashmapUserStore::default();
     let banned_token_store = HashsetBannedTokenStore::default();
-    let app_state = AppState::new(
+    let two_fa_code_store = HashmapTwoFACodeStore::default();
+    let app_state: AppState = AppState::new(
         Arc::new(RwLock::new(user_store)), 
-Arc::new(RwLock::new(banned_token_store)));
+Arc::new(RwLock::new(banned_token_store)),
+Arc::new(RwLock::new(two_fa_code_store))
+    );
 
     let app = Application::build(app_state, prod::APP_ADDRESS)
         .await
