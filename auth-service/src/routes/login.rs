@@ -50,16 +50,21 @@ async fn handle_2fa(
     let login_attempt_id = LoginAttemptId::default();
     let two_fa_code = TwoFACode::default();
 
-    if state.two_fa_code_store.write().await.add_code(email.clone(), login_attempt_id.clone(), two_fa_code).await.is_err() {
-        return (jar, Err(AuthAPIError::UnexpectedError))
+    if state.two_fa_code_store.write().await.add_code(email.clone(), login_attempt_id.clone(), two_fa_code.clone()).await.is_err() {
+        return (jar, Err(AuthAPIError::UnexpectedError));
     }
 
-    let auth_response = TwoFactorAuthResponse {
-        message: "2FA required".to_owned(),
-        login_attempt_id: login_attempt_id.as_ref().to_string()
-    };
+    if state.email_client.write().await
+        .send_email(email, "Auth key", two_fa_code.as_ref()).await.is_err() {
+            return (jar, Err(AuthAPIError::UnexpectedError));
+    }
 
-    (jar, Ok((StatusCode::PARTIAL_CONTENT, Json(LoginResponse::TwoFactorAuth(auth_response)))))
+    let response = Json(LoginResponse::TwoFactorAuth(TwoFactorAuthResponse {
+        message: "2FA required".to_owned(),
+        login_attempt_id: login_attempt_id.as_ref().to_owned(),
+    }));
+
+    (jar, Ok((StatusCode::PARTIAL_CONTENT, response)))
 }
 
 async fn handle_no_2fa(
