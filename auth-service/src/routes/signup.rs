@@ -2,7 +2,7 @@ use axum::{extract::State, http::StatusCode, response::IntoResponse, Json};
 use serde::{Deserialize, Serialize};
 
 use crate::{
-    Password, app_state::AppState, domain::{AuthAPIError, Email, User}, password
+    HashedPassword, app_state::AppState, domain::{AuthAPIError, Email, User}, password
 };
 
 pub async fn signup(
@@ -10,7 +10,7 @@ pub async fn signup(
     Json(request): Json<SignupRequest>,
 ) -> Result<impl IntoResponse, AuthAPIError> {
     // Attempt to pase email and passowrd 
-    let (email, password) = match (Email::parse(request.email), Password::parse(request.password)) {
+    let (email, password) = match (Email::parse(request.email), HashedPassword::parse(request.password).await) {
         (Ok(email), Ok(password)) => (email, password),
         // Invalid params 
         _ => return Err(AuthAPIError::InvalidCredentials)

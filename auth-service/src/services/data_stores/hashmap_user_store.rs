@@ -1,7 +1,7 @@
 use std::collections::HashMap;
 
 use crate::Email;
-use crate::Password;
+use crate::HashedPassword;
 use crate::UserStore;
 use crate::domain::User;
 use crate::domain::UserStoreError;
@@ -29,14 +29,14 @@ impl UserStore for HashmapUserStore {
         }
     }
 
-    async fn validate_user(&self, email: &Email, password: &Password) -> Result<(), UserStoreError> {
-        let user = self.get_user(email).await?;
+    async fn validate_user(&self, email: &Email, raw_password: &str) -> Result<(), UserStoreError> {
+        let user: &User = self.map.get(email)
+            .ok_or(UserStoreError::UserNotFound)?;
         
-        if &user.password == password {
-            Ok(())
-        } else {
-            Err(UserStoreError::InvalidCredentials)
-        }
+        user.password // updated password verification
+            .verify_raw_password(raw_password)
+            .await
+            .map_err(|_| UserStoreError::InvalidCredentials)
     }
 }
 
@@ -48,7 +48,7 @@ mod tests {
     async fn test_add_user() {
         let mut hus = HashmapUserStore::default();
         let email = Email::parse("email@gamil.com".to_string()).unwrap();
-        let password = Password::parse("password".to_string()).unwrap();
+        let password = HashedPassword::parse("password".to_string()).await.unwrap();
 
         let user = User::new(email, password, false);
 
@@ -59,7 +59,7 @@ mod tests {
     async fn test_get_user() {
         let mut hus = HashmapUserStore::default();
         let email = Email::parse("email@gamil.com".to_string()).unwrap();
-        let password = Password::parse("password".to_string()).unwrap();
+        let password = HashedPassword::parse("password".to_string()).await.unwrap();
 
         let user = User::new(email.clone(), password, false);
 
@@ -71,11 +71,12 @@ mod tests {
     async fn test_validate_user() {
         let mut hus = HashmapUserStore::default();
         let email = Email::parse("email@gamil.com".to_string()).unwrap();
-        let password = Password::parse("password".to_string()).unwrap();
+        let raw_password = "password";
+        let password = HashedPassword::parse(raw_password.to_string()).await.unwrap();
 
         let user = User::new(email.clone(), password.clone(), false);
 
         assert!(hus.add_user(user).await.is_ok());
-        assert!(hus.validate_user(&email, &password).await.is_ok());
+        assert!(hus.validate_user(&email, raw_password).await.is_ok());
     }
 }

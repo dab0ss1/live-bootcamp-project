@@ -3,7 +3,7 @@ use axum_extra::extract::CookieJar;
 use serde::{Deserialize, Serialize};
 
 use crate::{
-    LoginAttemptId, Password, TwoFACode, app_state::AppState, domain::{AuthAPIError, Email}, utils::auth::generate_auth_cookie
+    LoginAttemptId, HashedPassword, TwoFACode, app_state::AppState, domain::{AuthAPIError, Email}, utils::auth::generate_auth_cookie
 };
 
 pub async fn login(
@@ -12,7 +12,7 @@ pub async fn login(
     Json(request): Json<LoginRequest>,
 ) -> (CookieJar, Result<impl IntoResponse, AuthAPIError>) {
     // Attempt to pase email and passowrd 
-    let (email, password) = match (Email::parse(request.email), Password::parse(request.password)) {
+    let (email, _) = match (Email::parse(request.email), HashedPassword::parse(request.password.clone()).await) {
         (Ok(email), Ok(password)) => (email, password),
         // Invalid params 
         _ => return (jar, Err(AuthAPIError::InvalidCredentials))
@@ -21,7 +21,7 @@ pub async fn login(
     let mut user_store = state.user_store.read().await;
 
     // Credentials failed to validate 
-    if user_store.validate_user(&email, &password).await.is_err() {
+    if user_store.validate_user(&email, &request.password).await.is_err() {
         return (jar, Err(AuthAPIError::IncorrectCredentials));
     }
 

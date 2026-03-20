@@ -59,7 +59,8 @@ fn generate_auth_token(email: &Email) -> Result<String, GenerateTokenError> {
 // Check if JWT auth token is valid by decoding it using the JWT secret
 pub async fn validate_token(banned_token_store: BannedTokenStoreType, token: &str) -> Result<Claims, jsonwebtoken::errors::Error> {
     let bts_read = banned_token_store.read().await;
-    if bts_read.is_token_banished(token).await {
+    let is_banished = bts_read.is_token_banished(token).await;
+    if is_banished.is_err() || is_banished.unwrap() {
         return Err(jsonwebtoken::errors::Error::from(jsonwebtoken::errors::ErrorKind::InvalidToken));
     } 
     decode::<Claims>(

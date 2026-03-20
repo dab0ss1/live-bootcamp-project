@@ -9,7 +9,9 @@ use axum::{
     Json,
 };
 use domain::AuthAPIError;
+use redis::RedisResult;
 use serde::{Deserialize, Serialize};
+use sqlx::{PgPool, postgres::PgPoolOptions};
 use tokio::net::TcpListener;
 use tower_http::{cors::CorsLayer, services::{ServeDir, ServeFile}};
 
@@ -72,6 +74,16 @@ impl Application {
     }
 }
 
+pub async fn get_postgres_pool(url: &str) -> Result<PgPool, sqlx::Error> {
+    // Create a new PostgreSQL connection pool
+    let pool = PgPoolOptions::new().max_connections(5).connect(url).await;
+    pool
+}
+
+pub fn get_redis_client(redis_hostname: String) -> RedisResult<redis::Client> {
+    let redis_url = format!("redis://{}/", redis_hostname);
+    redis::Client::open(redis_url)
+}
 
 #[derive(Serialize, Deserialize)]
 pub struct ErrorResponse {

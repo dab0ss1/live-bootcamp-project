@@ -1,4 +1,4 @@
-use super::{User, Email, Password};
+use super::{User, Email, HashedPassword};
 use rand::Rng;
 use uuid::Uuid;
 
@@ -14,13 +14,18 @@ pub enum UserStoreError {
 pub trait UserStore: Send + Sync {
     async fn add_user(&mut self, user: User) -> Result<(), UserStoreError>;
     async fn get_user(&self, email: &Email) -> Result<User, UserStoreError>;
-    async fn validate_user(&self, email: &Email, password: &Password) -> Result<(), UserStoreError>;
+    async fn validate_user(&self, email: &Email, raw_password: &str) -> Result<(), UserStoreError>;
+}
+
+#[derive(Debug, PartialEq)]
+pub enum BannedTokenStoreError {
+    UnexpectedError,
 }
 
 #[async_trait::async_trait]
 pub trait BannedTokenStore: Send + Sync {
-    async fn banish_token(&mut self, token: &str);
-    async fn is_token_banished(&self, token: &str) -> bool;
+    async fn banish_token(&mut self, token: &str) -> Result<(), BannedTokenStoreError>;
+    async fn is_token_banished(&self, token: &str) -> Result<bool, BannedTokenStoreError>;
 } 
 
 // This trait represents the interface all concrete 2FA code stores should implement
