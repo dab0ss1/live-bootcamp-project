@@ -1,8 +1,10 @@
 use crate::helpers::{get_random_email, TestApp};
+use secrecy::{ExposeSecret, SecretString, SerializableSecret};
 use uuid::Uuid;
 use auth_service::{
     ErrorResponse, constants::JWT_COOKIE_NAME, domain::{Email, LoginAttemptId, TwoFACode, TwoFACodeStore}, routes::TwoFactorAuthResponse
 };
+use wiremock::{Mock, ResponseTemplate, matchers::{method, path}};
 
 #[tokio::test]
 async fn should_return_200_if_correct_code() {
@@ -20,6 +22,13 @@ async fn should_return_200_if_correct_code() {
     let response = app.post_signup(&signup_body).await;
 
     assert_eq!(response.status().as_u16(), 201);
+
+    Mock::given(path("/email"))
+        .and(method("POST"))
+        .respond_with(ResponseTemplate::new(200))
+        .expect(1)
+        .mount(&app.email_server)
+        .await;
 
     let login_body = serde_json::json!({
         "email": random_email,
@@ -42,14 +51,14 @@ async fn should_return_200_if_correct_code() {
         .two_fa_code_store
         .read()
         .await
-        .get_code(&Email::parse(random_email.clone()).unwrap())
+        .get_code(&Email::parse(SecretString::new(random_email.clone().into())).unwrap())
         .await
         .unwrap();
 
     let request_body = serde_json::json!({
         "email": random_email,
-        "loginAttemptId": login_attempt_id.as_ref(),
-        "2FACode": two_fa_code.as_ref()
+        "loginAttemptId": login_attempt_id.as_ref().expose_secret(),
+        "2FACode": two_fa_code.as_ref().expose_secret()
     });
 
     let response = app.post_verify_2fa(&request_body).await;
@@ -121,16 +130,16 @@ async fn should_return_400_if_invalid_input() {
         serde_json::json!({
             "email": random_email.clone(),
             "loginAttemptId": "bad_uuid",
-            "2FACode": code.as_ref()
+            "2FACode": code.as_ref().expose_secret()
         }),
         serde_json::json!({
             "email": "bad_email.coom",
-            "loginAttemptId": login_attempt_id.as_ref(),
-            "2FACode": code.as_ref()
+            "loginAttemptId": login_attempt_id.as_ref().expose_secret(),
+            "2FACode": code.as_ref().expose_secret()
         }),
         serde_json::json!({
             "email": random_email.clone(),
-            "loginAttemptId": login_attempt_id.as_ref(),
+            "loginAttemptId": login_attempt_id.as_ref().expose_secret(),
             "2FACode": "bad_code"
         }),
     ];
@@ -170,6 +179,13 @@ async fn should_return_401_if_incorrect_credentials() {
 
     assert_eq!(response.status().as_u16(), 201);
 
+    Mock::given(path("/email"))
+        .and(method("POST"))
+        .respond_with(ResponseTemplate::new(200))
+        .expect(1)
+        .mount(&app.email_server)
+        .await;
+
     // login
     let login_body = serde_json::json!({
         "email": random_email,
@@ -192,7 +208,7 @@ async fn should_return_401_if_incorrect_credentials() {
         .two_fa_code_store
         .read()
         .await
-        .get_code(&Email::parse(random_email.clone()).unwrap())
+        .get_code(&Email::parse(SecretString::new(random_email.clone().into())).unwrap())
         .await
         .unwrap();
 
@@ -209,7 +225,7 @@ async fn should_return_401_if_incorrect_credentials() {
         ),
         (
             random_email.as_str(),
-            incorrect_login_attempt_id.as_str(),
+            &incorrect_login_attempt_id,
             two_fa_code,
         ),
         (
@@ -222,8 +238,8 @@ async fn should_return_401_if_incorrect_credentials() {
     for (email, login_attempt_id, code) in test_cases {
         let request_body = serde_json::json!({
             "email": email,
-            "loginAttemptId": login_attempt_id,
-            "2FACode": code.as_ref()
+            "loginAttemptId": login_attempt_id.expose_secret(),
+            "2FACode": code.as_ref().expose_secret()    
         });
 
         let response = app.post_verify_2fa(&request_body).await;
@@ -265,6 +281,13 @@ async fn should_return_401_if_old_code() {
 
     assert_eq!(response.status().as_u16(), 201);
 
+    Mock::given(path("/email"))
+        .and(method("POST"))
+        .respond_with(ResponseTemplate::new(200))
+        .expect(2)
+        .mount(&app.email_server)
+        .await;
+
     // login
     let login_body = serde_json::json!({
         "email": random_email,
@@ -287,7 +310,7 @@ async fn should_return_401_if_old_code() {
         .two_fa_code_store
         .read()
         .await
-        .get_code(&Email::parse(random_email.clone()).unwrap())
+        .get_code(&Email::parse(SecretString::new(random_email.clone().into())).unwrap())
         .await
         .unwrap();
 
@@ -299,8 +322,8 @@ async fn should_return_401_if_old_code() {
     // verify 2fa with old id and code
     let request_body = serde_json::json!({
         "email": random_email,
-        "loginAttemptId": login_attempt_id.as_ref(),
-        "2FACode": two_fa_code.as_ref()
+        "loginAttemptId": login_attempt_id.as_ref().expose_secret(),
+        "2FACode": two_fa_code.as_ref().expose_secret()
     });
 
     let response = app.post_verify_2fa(&request_body).await;
@@ -327,6 +350,13 @@ async fn should_return_401_if_same_code_twice() {
 
     assert_eq!(response.status().as_u16(), 201);
 
+    Mock::given(path("/email"))
+        .and(method("POST"))
+        .respond_with(ResponseTemplate::new(200))
+        .expect(1)
+        .mount(&app.email_server)
+        .await;
+
     let login_body = serde_json::json!({
         "email": random_email,
         "password": password
@@ -348,14 +378,14 @@ async fn should_return_401_if_same_code_twice() {
         .two_fa_code_store
         .read()
         .await
-        .get_code(&Email::parse(random_email.clone()).unwrap())
+        .get_code(&Email::parse(SecretString::new(random_email.clone().into())).unwrap())
         .await
         .unwrap();
 
     let request_body = serde_json::json!({
         "email": random_email,
-        "loginAttemptId": login_attempt_id.as_ref(),
-        "2FACode": two_fa_code.as_ref()
+        "loginAttemptId": login_attempt_id.as_ref().expose_secret(),
+        "2FACode": two_fa_code.as_ref().expose_secret()
     });
 
     let response = app.post_verify_2fa(&request_body).await;

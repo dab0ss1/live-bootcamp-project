@@ -1,6 +1,8 @@
 use auth_service::{Email, ErrorResponse, utils::constants::JWT_COOKIE_NAME};
+use wiremock::{Mock, ResponseTemplate, matchers::{method, path}};
 use crate::helpers::{get_random_email, TestApp};
 use auth_service::TwoFactorAuthResponse;
+use secrecy::{ExposeSecret, SecretString};
 
 #[tokio::test]
 async fn should_return_200_if_valid_credentials_and_2fa_disabled() {
@@ -53,6 +55,14 @@ async fn should_return_206_if_valid_credentials_and_2fa_enabled() {
 
     assert_eq!(response.status().as_u16(), 201);
 
+    // Define an expectation for the mock server
+    Mock::given(path("/email")) // Expect an HTTP request to the "/email" path
+        .and(method("POST")) // Expect the HTTP method to be POST
+        .respond_with(ResponseTemplate::new(200)) // Respond with an HTTP 200 OK status
+        .expect(1) // Expect this request to be made exactly once
+        .mount(&app.email_server) // Mount this expectation on the mock email server
+        .await; // Await the asynchronous operation to ensure the mock server is set up before proceeding
+
     let login_body = serde_json::json!({
         "email": random_email,
         "password": "password123",
@@ -70,10 +80,10 @@ async fn should_return_206_if_valid_credentials_and_2fa_enabled() {
     assert_eq!(json_body.message, "2FA required".to_owned());
 
     let id_response = json_body.login_attempt_id;
-    let email: Email = Email::parse(random_email).expect("Email should have parsed");
-    let (id_attempt, code) = app.two_fa_code_store.read().await.get_code(&email).await
+    let email: Email = Email::parse(SecretString::new(random_email.into())).expect("Email should have parsed");
+    let (id_attempt, _) = app.two_fa_code_store.read().await.get_code(&email).await
         .expect("two fa attempt shoudl exist for email");
-    assert_eq!(id_response, id_attempt.as_ref());
+    assert_eq!(id_response, id_attempt.as_ref().expose_secret().to_owned());
 
     app.clean_up().await;
 }

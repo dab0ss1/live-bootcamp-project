@@ -1,10 +1,13 @@
 use axum::{extract::State, http::StatusCode, response::IntoResponse, Json};
 use serde::{Deserialize, Serialize};
+use ::tracing;
+use secrecy::SecretString;
 
 use crate::{
     HashedPassword, app_state::AppState, domain::{AuthAPIError, Email, User}, password
 };
 
+#[tracing::instrument(name = "Signup", skip_all)]
 pub async fn signup(
     State(state): State<AppState>,
     Json(request): Json<SignupRequest>,
@@ -26,8 +29,8 @@ pub async fn signup(
     }
 
     // Unable to add user for an unexpected reason
-    if user_store.add_user(user).await.is_err() {
-        return Err(AuthAPIError::UnexpectedError);
+    if let Err(e) = user_store.add_user(user).await {
+        return Err(AuthAPIError::UnexpectedError(e.into()));
     }
 
     let response = Json(SignupResponse {
@@ -39,8 +42,8 @@ pub async fn signup(
 
 #[derive(Deserialize)]
 pub struct SignupRequest {
-    pub email: String,
-    pub password: String,
+    pub email: SecretString,
+    pub password: SecretString,
     #[serde(rename = "requires2FA")]
     pub requires_2fa: bool,
 }

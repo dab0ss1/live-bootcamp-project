@@ -1,11 +1,13 @@
 use axum::{extract::State, http::StatusCode, response::IntoResponse, Json};
 use axum_extra::extract::CookieJar;
+use secrecy::SecretString;
 use serde::Deserialize;
 
 use crate::{
     app_state::AppState, auth::generate_auth_cookie, domain::{AuthAPIError, Email, LoginAttemptId, TwoFACode}
 };
 
+#[tracing::instrument(name = "Verifying 2FA", skip_all)]
 pub async fn verify_2fa(
     State(state): State<AppState>,
     jar: CookieJar,
@@ -35,15 +37,15 @@ pub async fn verify_2fa(
     }
 
     // remove two fa code from store (only allow single use)
-    if two_fa_code_store.remove_code(&email).await.is_err() {
-        return (jar, Err(AuthAPIError::UnexpectedError));
+    if let Err(e) = two_fa_code_store.remove_code(&email).await {
+        return (jar, Err(AuthAPIError::UnexpectedError(e.into())));
     }
 
     // update jar cookie with auth
     let auth_cookie = match generate_auth_cookie(&email) {
         Ok(cookie) => cookie,
-        _ => {
-            return (jar, Err(AuthAPIError::UnexpectedError));
+        Err(e) => {
+            return (jar, Err(AuthAPIError::UnexpectedError(e)));
         }
     };
     let updated_jar = jar.add(auth_cookie);
@@ -54,9 +56,9 @@ pub async fn verify_2fa(
 
 #[derive(Deserialize)]
 pub struct Verify2FARequest {
-    pub email: String,
+    pub email: SecretString,
     #[serde(rename = "loginAttemptId")]
-    pub login_attempt_id: String,
+    pub login_attempt_id: SecretString,
     #[serde(rename = "2FACode")]
-    pub two_fa_code: String,
+    pub two_fa_code: SecretString,
 }

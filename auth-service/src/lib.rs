@@ -10,10 +10,12 @@ use axum::{
 };
 use domain::AuthAPIError;
 use redis::RedisResult;
+use secrecy::{ExposeSecret, SecretString};
 use serde::{Deserialize, Serialize};
 use sqlx::{PgPool, postgres::PgPoolOptions};
 use tokio::net::TcpListener;
-use tower_http::{cors::CorsLayer, services::{ServeDir, ServeFile}};
+use tower_http::{cors::CorsLayer, services::{ServeDir, ServeFile}, trace::TraceLayer};
+use utils::tracing::{make_span_with_request_id, on_request, on_response};
 
 pub mod app_state;
 pub mod domain;
@@ -59,7 +61,16 @@ impl Application {
             .route("/logout", post(logout))
             .route("/verify-token", post(verify_token))
             .with_state(app_state)
-            .layer(cors);
+            .layer(cors)
+            .layer(
+                // Add a TraceLayer for HTTP requests to enable detailed tracing
+                // This layer will create spans for each request using the make_span_with_request_id function,
+                // and log events at the start and end of each request using on_request and on_response functions.
+                TraceLayer::new_for_http()
+                    .make_span_with(make_span_with_request_id)
+                    .on_request(on_request)
+                    .on_response(on_response),
+            );
 
         let listener = tokio::net::TcpListener::bind(address).await?;
         let address = listener.local_addr()?.to_string();
@@ -69,14 +80,17 @@ impl Application {
     }
 
     pub async fn run(self) -> Result<(), std::io::Error> {
-        println!("listening on {}", &self.address);
+        ::tracing::info!("listening on {}", &self.address);
         self.server.await
     }
 }
 
-pub async fn get_postgres_pool(url: &str) -> Result<PgPool, sqlx::Error> {
+pub async fn get_postgres_pool(url: &SecretString) -> Result<PgPool, sqlx::Error> {
     // Create a new PostgreSQL connection pool
-    let pool = PgPoolOptions::new().max_connections(5).connect(url).await;
+    let pool = PgPoolOptions::new()
+        .max_connections(5)
+        .connect(url.expose_secret())
+        .await;
     pool
 }
 
@@ -92,19 +106,34 @@ pub struct ErrorResponse {
 
 impl IntoResponse for AuthAPIError {
     fn into_response(self) -> Response {
+        log_error_chain(&self);
         let (status, error_message) = match self {
             AuthAPIError::UserAlreadyExists => (StatusCode::CONFLICT, "User already exists"),
             AuthAPIError::InvalidCredentials => (StatusCode::BAD_REQUEST, "Invalid credentials"),
             AuthAPIError::IncorrectCredentials => (StatusCode::UNAUTHORIZED, "Incorrect credentials"),
-            AuthAPIError::UnexpectedError => {
-                (StatusCode::INTERNAL_SERVER_ERROR, "Unexpected error")
-            },
             AuthAPIError::MissingToken => (StatusCode::BAD_REQUEST, "Missing auth token"),
             AuthAPIError::InvalidToken => (StatusCode::UNAUTHORIZED, "Invalid token"),
+            AuthAPIError::UnexpectedError(_) => {
+                (StatusCode::INTERNAL_SERVER_ERROR, "Unexpected error")
+            }
         };
         let body = Json(ErrorResponse {
             error: error_message.to_string(),
         });
         (status, body).into_response()
     }
+}
+
+fn log_error_chain(e: &(dyn Error + 'static)) {
+    let separator =
+        "\n-----------------------------------------------------------------------------------\n";
+    let mut report = format!("{}{:?}\n", separator, e);
+    let mut current = e.source();
+    while let Some(cause) = current {
+        let str = format!("Caused by:\n\n{:?}", cause);
+        report = format!("{}\n{}", report, str);
+        current = cause.source();
+    }
+    report = format!("{}\n{}", report, separator);
+    ::tracing::error!("{}", report);
 }
